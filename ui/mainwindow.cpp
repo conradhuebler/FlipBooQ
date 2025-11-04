@@ -20,8 +20,12 @@
 #include "ui/tools/flowlayout.h"
 
 #include <QtCore/QFile>
+#include <QtCore/QMimeData>
+#include <QtCore/QUrl>
 
 #include <QtGui/QPixmap>
+#include <QtGui/QDragEnterEvent>
+#include <QtGui/QDropEvent>
 
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QMainWindow>
@@ -30,6 +34,7 @@
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QShortcut>
 
 #include <QtWidgets/QGraphicsView>
 #include <QtWidgets/QGraphicsPixmapItem>
@@ -41,7 +46,8 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     setUi();
-    resize(1280,960);
+    resize(1280, 960);
+    setAcceptDrops(true);
 }
 
 MainWindow::~MainWindow()
@@ -76,11 +82,14 @@ void MainWindow::setUi()
 
     m_flowLayout = new FlowLayout;
 
+    // Zoom slider (0.1x to 2.0x)
     m_zoom = new QSlider(Qt::Horizontal);
-    m_zoom->setMinimum(0);
-    m_zoom->setMaximum(100);
+    m_zoom->setMinimum(1);   // 0.1x scale
+    m_zoom->setMaximum(20);  // 2.0x scale
     m_zoom->setTickInterval(1);
-    m_zoom->setValue(10);
+    m_zoom->setValue(5);     // Default 0.5x scale
+    m_zoom->setTickPosition(QSlider::TicksBelow);
+    connect(m_zoom, &QSlider::valueChanged, this, &MainWindow::onZoomChanged);
 
     QWidget *layoutWidget = new QWidget;
     layoutWidget->setLayout(m_flowLayout);
@@ -91,13 +100,39 @@ void MainWindow::setUi()
 
     QVBoxLayout *mainLayout = new QVBoxLayout;
     mainLayout->addLayout(layout);
-    //mainLayout->addWidget(m_zoom);
+    mainLayout->addWidget(m_zoom);
     mainLayout->addWidget(scrollArea);
 
     m_centralWidget->setLayout(mainLayout);
 
     setCentralWidget(m_centralWidget);
     EnableButtons(false);
+
+    // Setup keyboard shortcuts
+    setupShortcuts();
+}
+
+void MainWindow::setupShortcuts()
+{
+    // Ctrl+O: Open files
+    QShortcut *openShortcut = new QShortcut(QKeySequence::Open, this);
+    connect(openShortcut, &QShortcut::activated, this, &MainWindow::load);
+
+    // Ctrl+S: Save files
+    QShortcut *saveShortcut = new QShortcut(QKeySequence::Save, this);
+    connect(saveShortcut, &QShortcut::activated, this, &MainWindow::save);
+
+    // Ctrl+W: Clear workspace
+    QShortcut *clearShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_W), this);
+    connect(clearShortcut, &QShortcut::activated, this, &MainWindow::clear);
+
+    // Ctrl+Q: Quit application
+    QShortcut *quitShortcut = new QShortcut(QKeySequence::Quit, this);
+    connect(quitShortcut, &QShortcut::activated, qApp, &QApplication::quit);
+
+    // Ctrl+A: Analyze images
+    QShortcut *analyzeShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_A), this);
+    connect(analyzeShortcut, &QShortcut::activated, this, &MainWindow::get);
 }
 
 void MainWindow::EnableButtons(bool enable)
@@ -147,15 +182,13 @@ bool MainWindow::addFile(const QString &file)
 
     QGraphicsView *view = new QGraphicsView(scene);
     m_flowLayout->addWidget(view);
-    view->scale(0.5, 0.5);
-    m_image_view << view;
 
+    // Apply current zoom level
+    double scale = m_zoom->value() / 10.0;
+    view->scale(scale, scale);
+
+    m_image_view << view;
     EnableButtons(true);
-   /*
-    connect(m_zoom, &QSlider::valueChanged, view, [view](int value){
-        view->resize(30*value, 30*value);
-    });
-    */
 
     return true;
 }
@@ -277,6 +310,68 @@ void MainWindow::clear()
     }
 
     EnableButtons(false);
+}
+
+void MainWindow::onZoomChanged(int value)
+{
+    double scale = value / 10.0;  // Convert slider value to scale (0.1x to 2.0x)
+
+    for (auto *view : m_image_view) {
+        if (view) {
+            // Reset transform and apply new scale
+            view->resetTransform();
+            view->scale(scale, scale);
+        }
+    }
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+{
+    // Accept drag if it contains URLs (files)
+    if (event->mimeData()->hasUrls()) {
+        event->acceptProposedAction();
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent *event)
+{
+    const QMimeData *mimeData = event->mimeData();
+
+    if (mimeData->hasUrls()) {
+        QList<QUrl> urlList = mimeData->urls();
+        int loadedCount = 0;
+        int failedCount = 0;
+
+        for (const QUrl &url : urlList) {
+            if (url.isLocalFile()) {
+                QString filePath = url.toLocalFile();
+                // Check if it's an image file
+                if (filePath.endsWith(".png", Qt::CaseInsensitive) ||
+                    filePath.endsWith(".jpg", Qt::CaseInsensitive) ||
+                    filePath.endsWith(".jpeg", Qt::CaseInsensitive) ||
+                    filePath.endsWith(".xpm", Qt::CaseInsensitive)) {
+
+                    if (addFile(filePath)) {
+                        loadedCount++;
+                    } else {
+                        failedCount++;
+                    }
+                }
+            }
+        }
+
+        if (loadedCount > 0 && failedCount == 0) {
+            // All files loaded successfully - no message needed
+        } else if (loadedCount > 0 && failedCount > 0) {
+            QMessageBox::information(this, tr("Drag & Drop"),
+                                   tr("Loaded %1 image(s), %2 failed.")
+                                   .arg(loadedCount).arg(failedCount));
+        } else if (failedCount > 0) {
+            // All failed - individual error messages already shown by addFile()
+        }
+
+        event->acceptProposedAction();
+    }
 }
 
 QRect MainWindow::getRect(const QVector<QPixmap> &pixmaps)

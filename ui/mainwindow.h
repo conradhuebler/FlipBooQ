@@ -45,6 +45,12 @@ public:
     void clear();
 
     void setUi();
+    void setupShortcuts();
+    void onZoomChanged(int value);
+
+protected:
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
 
 private:
     void EnableButtons(bool enable);
