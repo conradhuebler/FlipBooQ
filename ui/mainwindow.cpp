@@ -1,5 +1,5 @@
 /*
- * <one line to give the program's name and a brief idea of what it does.>
+ * FlipBooQ - Automatic white border removal tool
  * Copyright (C) 2022 Conrad Hübler <Conrad.Huebler@gmx.net>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -29,6 +29,7 @@
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QScrollArea>
+#include <QtWidgets/QMessageBox>
 
 #include <QtWidgets/QGraphicsView>
 #include <QtWidgets/QGraphicsPixmapItem>
@@ -106,26 +107,57 @@ void MainWindow::EnableButtons(bool enable)
     m_clear->setEnabled(enable);
 }
 
-void MainWindow::addFile(const QString &file)
+bool MainWindow::addFile(const QString &file)
 {
+    // Validate file existence
+    if (!QFile::exists(file)) {
+        QMessageBox::warning(this, tr("Error"),
+                           tr("File not found: %1").arg(file));
+        return false;
+    }
+
+    // Load pixmap and validate
     QPixmap pix(file);
+    if (pix.isNull()) {
+        QMessageBox::warning(this, tr("Error"),
+                           tr("Cannot load image: %1\nFile may be corrupted or format not supported.").arg(file));
+        return false;
+    }
+
+    // Check image size limits
+    const int maxDimension = 10000;
+    if (pix.width() > maxDimension || pix.height() > maxDimension) {
+        auto reply = QMessageBox::question(this, tr("Large Image"),
+                                          tr("Image is very large (%1x%2).\nThis may consume significant memory.\n\nContinue?")
+                                          .arg(pix.width()).arg(pix.height()),
+                                          QMessageBox::Yes | QMessageBox::No);
+        if (reply == QMessageBox::No) {
+            return false;
+        }
+    }
+
+    // Add to internal storage
     m_file_names << file;
     m_images << pix;
 
-    QGraphicsScene *scene = new QGraphicsScene;
+    // Create scene and view
+    QGraphicsScene *scene = new QGraphicsScene(this);
     scene->addPixmap(pix);
     m_image_scene << scene;
 
     QGraphicsView *view = new QGraphicsView(scene);
     m_flowLayout->addWidget(view);
-    view->scale(0.5,0.5);
+    view->scale(0.5, 0.5);
     m_image_view << view;
+
     EnableButtons(true);
    /*
     connect(m_zoom, &QSlider::valueChanged, view, [view](int value){
         view->resize(30*value, 30*value);
     });
     */
+
+    return true;
 }
 
 void MainWindow::load()
@@ -152,26 +184,98 @@ void MainWindow::get()
 
 void MainWindow::save()
 {
-    for(int i = 0; i < m_images.size(); ++i)
-    {
+    if (m_images.isEmpty()) {
+        QMessageBox::warning(this, tr("Error"),
+                           tr("No images to save."));
+        return;
+    }
+
+    if (m_rect.isEmpty()) {
+        QMessageBox::warning(this, tr("Error"),
+                           tr("No crop area defined. Please analyze images first."));
+        return;
+    }
+
+    int successCount = 0;
+    int failCount = 0;
+    QStringList failedFiles;
+
+    for (int i = 0; i < m_images.size(); ++i) {
         QFileInfo f(m_file_names[i]);
-        qDebug() << i << "export_" + f.path() +QDir::separator() +"export_" + f.fileName();
+        QString outputPath = f.path() + QDir::separator() + "export_" + f.fileName();
+
+        // Check if directory is writable
+        QFileInfo dirInfo(f.path());
+        if (!dirInfo.isWritable()) {
+            failedFiles << f.fileName() + tr(" (directory not writable)");
+            failCount++;
+            continue;
+        }
+
+        // Copy crop area
         QPixmap tmp = m_images[i].copy(m_rect);
-        QFile writeFile(f.path() +QDir::separator() +"export_" + f.fileName());
-        writeFile.open(QIODevice::WriteOnly);
-        qDebug() << tmp.save(&writeFile);
+        if (tmp.isNull()) {
+            failedFiles << f.fileName() + tr(" (invalid crop area)");
+            failCount++;
+            continue;
+        }
+
+        // Open file for writing
+        QFile writeFile(outputPath);
+        if (!writeFile.open(QIODevice::WriteOnly)) {
+            failedFiles << f.fileName() + tr(" (cannot create file)");
+            failCount++;
+            continue;
+        }
+
+        // Save image
+        if (!tmp.save(&writeFile)) {
+            failedFiles << f.fileName() + tr(" (save failed)");
+            failCount++;
+            writeFile.close();
+            continue;
+        }
+
+        writeFile.close();
+        successCount++;
+    }
+
+    // Show results to user
+    QString message;
+    if (failCount == 0) {
+        message = tr("Successfully exported %1 image(s).").arg(successCount);
+        QMessageBox::information(this, tr("Export Complete"), message);
+    } else {
+        message = tr("Exported %1 image(s) successfully.\n%2 image(s) failed:\n\n%3")
+                      .arg(successCount)
+                      .arg(failCount)
+                      .arg(failedFiles.join("\n"));
+        QMessageBox::warning(this, tr("Export Completed with Errors"), message);
     }
 }
 
 void MainWindow::clear()
 {
+    // Clear image data
     m_images.clear();
     m_file_names.clear();
+    m_rect = QRect();
+
+    // Delete scenes first
+    qDeleteAll(m_image_scene);
+    m_image_scene.clear();
+
+    // Delete views
     qDeleteAll(m_image_view);
     m_image_view.clear();
+
+    // Clear layout items (views are already deleted, just delete layout items)
     QLayoutItem *item;
-    while ((item = m_flowLayout->takeAt(0)))
+    while ((item = m_flowLayout->takeAt(0))) {
+        // Widget is already deleted via qDeleteAll above
         delete item;
+    }
+
     EnableButtons(false);
 }
 
