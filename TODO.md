@@ -7,30 +7,30 @@ This document outlines planned improvements and modernization efforts for FlipBo
 
 ## Phase 1: Grundlegende Verbesserungen (HIGH PRIORITY)
 
-### 1.1 Fehlerbehandlung und Robustheit [WIP]
-- [ ] Validierung beim Laden von Bildern
+### 1.1 Fehlerbehandlung und Robustheit ✅ 2025-01-04
+- [x] Validierung beim Laden von Bildern
   - Dateiexistenz prüfen
   - Bildformat validieren
   - Größenlimits implementieren (>10000px warnen)
-- [ ] Fehlerbehandlung beim Speichern
+- [x] Fehlerbehandlung beim Speichern
   - Schreibrechte prüfen
-  - Disk-Space validieren
+  - Speichern validieren
   - Fehlgeschlagene Exports loggen
-- [ ] QMessageBox für Benutzerfeedback bei Fehlern
-- [ ] Memory-Management verbessern in `clear()`
+- [x] QMessageBox für Benutzerfeedback bei Fehlern
+- [x] Memory-Management verbessern in `clear()`
   - Szenen und Views ordnungsgemäß löschen
   - Layout-Items mit Widgets löschen
 
-### 1.2 UI/UX Basisfunktionen [ADD]
-- [ ] **Drag & Drop Support** implementieren
-  ```cpp
-  void dragEnterEvent(QDragEnterEvent* event);
-  void dropEvent(QDropEvent* event);
-  ```
-- [ ] **Zoom-Slider aktivieren** (aktuell auskommentiert)
-  - Dynamische Skalierung 0.1x - 5.0x
+### 1.2 UI/UX Basisfunktionen ✅ 2025-01-04
+- [x] **Drag & Drop Support** implementiert
+  - dragEnterEvent und dropEvent hinzugefügt
+  - Filtert Bilddateien automatisch
+  - Zeigt Zusammenfassung von erfolgreich/fehlgeschlagen
+- [x] **Zoom-Slider aktiviert**
+  - Dynamische Skalierung 0.1x - 2.0x
   - Alle Views synchron zoomen
-- [ ] **Keyboard Shortcuts** hinzufügen
+  - Wird auf neue Bilder angewendet
+- [x] **Keyboard Shortcuts** hinzugefügt
   - Ctrl+O: Open files
   - Ctrl+S: Save
   - Ctrl+W: Clear

@@ -69,14 +69,15 @@ while ((item = layout->takeAt(0))) {
 
 ## Current Work [WIP]
 - Documentation restructured ✅ 2025-01-04
+- Phase 1.1: Error handling & robustness ✅ 2025-01-04
+- Phase 1.2: UI/UX basic functions ✅ 2025-01-04
 
-Next: Phase 1.1 - Error handling & robustness
+Next: Phase 1.3 - Export improvements
 
 ## Known Issues
-- Zoom slider disabled (mainwindow.cpp:124-128)
-- No error handling for save failures
-- Memory leak in clear() with layout items
-- Pixel (0,0) detection unreliable
+- Pixel (0,0) detection unreliable (Phase 2 improvement)
+- Export prefix hardcoded to "export_" (Phase 1.3)
+- No settings persistence (Phase 1.4)
 
 ## Copyright Headers
 ```cpp
